@@ -12,4 +12,9 @@ obj/
 
 # Example test results
 examples/log
-examples/output
+examples/output/**
+examples/out/**
+examples/ptx/**
+examples/bytecode.ll
+examples/main.bc
+examples/kernel.bc
