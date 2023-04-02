@@ -5,7 +5,9 @@ open Utils
 
 type FuzzerCLI =
   | [<AltCommandLine("-p")>] [<Mandatory>] [<Unique>] Program of path: string
+  | [<AltCommandLine("-k")>] [<Unique>] Kernel of path: string
   | [<AltCommandLine("-v")>] [<Unique>] Verbose of int
+  | [<AltCommandLine("-g")>] [<Unique>] GPU of int
   | [<AltCommandLine("-t")>] [<Mandatory>] [<Unique>] Timelimit of sec: int
   | [<AltCommandLine("-o")>] [<Mandatory>] [<Unique>] OutputDir of path: string
   | [<AltCommandLine("-a")>] [<Unique>] ABIFile of path: string
@@ -18,7 +20,9 @@ with
     member s.Usage =
       match s with
       | Program _ -> "Target program for test case generation with fuzzing."
+      | Kernel _ -> "Target PTX for test case generation with GPU fuzzing."
       | Verbose _ -> "Verbosity level to control debug messages."
+      | GPU _ -> "The GPU device ID to bind the fuzzer."
       | Timelimit _ -> "Timeout for fuzz testing (in seconds)."
       | OutputDir _ -> "Directory to store testcase outputs."
       | ABIFile _ -> "ABI JSON file."
@@ -32,6 +36,7 @@ with
 
 type FuzzOption = {
   Verbosity         : int
+  GPU               : int
   OutDir            : string
   Timelimit         : int
   ProgPath          : string
@@ -40,6 +45,7 @@ type FuzzOption = {
   DynamicDFA        : bool
   CheckOptionalBugs : bool
   UseOthersOracle   : bool
+  KernelPath        : string
 }
 
 let parseFuzzOption (args: string array) =
@@ -48,9 +54,11 @@ let parseFuzzOption (args: string array) =
   let r = try parser.Parse(args) with
           :? Argu.ArguParseException -> printLine (parser.PrintUsage()); exit 1
   { Verbosity = r.GetResult (<@ Verbose @>, defaultValue = 1)
+    GPU = r.GetResult (<@ GPU @>, defaultValue = 0)
     OutDir = r.GetResult (<@ OutputDir @>)
     Timelimit = r.GetResult (<@ Timelimit @>)
     ProgPath = r.GetResult (<@ Program @>)
+    KernelPath = r.GetResult (<@ Kernel @>, defaultValue = "")
     ABIPath = r.GetResult(<@ ABIFile @>, defaultValue = "")
     StaticDFA = not (r.Contains(<@ NoSDFA @>))  // Enabled by default.
     DynamicDFA = not (r.Contains(<@ NoDDFA @>)) // Enabled by default.

@@ -28,6 +28,10 @@ let log fmt =
   let timeStr = "[" + elapsed.ToString("dd\:hh\:mm\:ss") + "] "
   Printf.kprintf (fun str -> printLine <| timeStr + str) fmt
 
+let elapsedStr () = 
+  let elapsed = DateTime.Now - startTime
+  string "[" + elapsed.ToString("dd\:hh\:mm\:ss") + "] "
+
 let escapeString (str: string) =
   str.Replace("\\", "\\\\").Replace("\"", "\\\"")
 

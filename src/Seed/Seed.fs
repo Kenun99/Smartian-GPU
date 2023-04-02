@@ -114,6 +114,11 @@ module Seed =
   let private setCursor seed newPos =
     { seed with TXCursor = newPos }
 
+  // let freezeDeploy deployTx seed = 
+  //   let txs = seed.Transactions
+  //   let newTxs = Array.append [| deployTx |] txs.[1..]
+  //   { seed with Transactions = newTxs }
+
   (**************************** Query functions ****************************)
 
   /// Check if the input cursor has a valid index.

@@ -22,6 +22,7 @@
     <Compile Include="GreyConcolic/BranchInfo.fs" />
     <Compile Include="Fuzz/Options.fs" />
     <Compile Include="Fuzz/Executor.fs" />
+    <Compile Include="Fuzz/Runner.fs" />
     <Compile Include="Fuzz/TCManage.fs" />
     <Compile Include="GreyConcolic/BranchTrace.fs" />
     <Compile Include="GreyConcolic/Linearity.fs" />

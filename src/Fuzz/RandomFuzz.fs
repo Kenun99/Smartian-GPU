@@ -4,6 +4,8 @@ open Config
 open Utils
 open BytesUtils
 open EVMAnalysis
+open Runner
+open Options
 
 let private MUTATE_MAX_POW = 7
 let private ARITH_MAX = 35
@@ -171,5 +173,21 @@ let private repRandMutate contSpec seed =
   |> Seed.resetBlockData
 
 let run seed opt contSpec =
-  List.init Config.RAND_FUZZ_TRY_PER_SEED (fun _ -> repRandMutate contSpec seed)
-  |> List.filter (TCManage.evalAndSave opt)
+  if opt.KernelPath.Length > 0 then 
+    assertFileExists opt.KernelPath
+    let seeds = List.init Config.RAND_FUZZ_TRY_PER_SEED (fun _ -> repRandMutate contSpec seed)
+    /// in one thread
+    // seeds |> List.filter (TCManage.evalAndSaveCuda opt)
+    /// in group
+    let res = List.empty
+    for each in seeds do
+      let deployTx = Transaction.concretize each.Transactions.[0]
+      let group = List.init Config.FUZZ_SEEDS_PER_GROUP (fun _ -> repRandMutate contSpec each)
+      TCManage.runInGroup opt deployTx group
+      let evaled = group |> List.indexed |> List.filter (TCManage.postEvalAndSaveCuda opt) |> List.map (fun _ x -> x) 
+      res |> List.append evaled
+    res
+    
+  else 
+    List.init Config.RAND_FUZZ_TRY_PER_SEED (fun _ -> repRandMutate contSpec seed)
+    |> List.filter (TCManage.evalAndSave opt)

@@ -1,8 +1,13 @@
 module Smartian.Replay
 
+open System
+open System.Runtime.InteropServices
+
 open Argu
 open Utils
+open BytesUtils
 open Executor
+open Runner
 
 type ReplayerCLI =
   | [<AltCommandLine("-p")>] [<Mandatory>] [<Unique>] Program of path: string
@@ -111,11 +116,59 @@ let runDefaultMode opt =
   log "Covered Instructions: %d" accumInstrs.Count
   log "Elapsed time (ms): %.4f" totalElapsed
 
+let runCudaMode opt =
+  let testcaseDir = opt.TestcaseDir
+  let traceDU = opt.DynamicDFA
+  let checkOptionalBugs = opt.CheckOptionalBugs
+  let useOthersOracle = opt.UseOthersOracle
+  log "Start replaying test cases in : %s" testcaseDir
+  let mutable totalElapsed = 0.0
+
+  let mutable cuModule = CUmodule.Zero
+  let mutable cuCtx = CUcontext.Zero    
+  let GPUDev:Int32 = 4
+  InitCudaCtx(&cuCtx, GPUDev, &cuModule, opt.Program)
+
+  let mutable dSeed = CUdeviceptr.MinValue
+  let mutable dSignals = CUdeviceptr.MinValue
+  cuMallocAll(cuModule, &dSeed, &dSignals)
+
+  for file in sortTCs testcaseDir do
+    log "Replaying test case: %s" file
+    let tcStr = System.IO.File.ReadAllText file
+    let tc = TestCase.fromJson tcStr
+    let deployTx = tc.DeployTx
+    let txs = tc.Txs
+
+    let stopWatch = System.Diagnostics.Stopwatch.StartNew()  
+    setEVMEnv(cuModule, Address.toBytes LE deployTx.From, uint64 deployTx.Timestamp, 
+              uint64 deployTx.Blocknum) |> ignore
+
+    if cuDeployTx(cuModule, uint64 deployTx.Value, deployTx.Data, uint32 deployTx.Data.Length) <> true then
+      raise <| CudaException("DeployFail", CUresult.CUDA_ERROR_LAUNCH_FAILED)
+
+    for tx in txs do
+      setEVMEnv(cuModule, Address.toBytes LE tx.From, uint64 tx.Timestamp, 
+                uint64 tx.Blocknum) |> ignore
+      cuRunTxsInGroup(cuModule, dSeed, uint64 tx.Value, tx.Data, uint32 tx.Data.Length) |> ignore
+      cuCaptureBugs(dSignals, elapsedStr()) |> ignore
+      postCov(cuModule)
+
+    stopWatch.Stop()
+    totalElapsed <- totalElapsed + stopWatch.Elapsed.TotalMilliseconds
+  
+  log "Elapsed time (ms): %.4f" totalElapsed
+  cuFreeAll(cuModule, dSeed)
+  DestroyCuda(cuCtx, cuModule)
+
 /// Replay test cases in the given directory on target program.
 let run args =
   let opt = parseReplayOption args
   let program = opt.Program
   assertFileExists program
-  Executor.initialize program
-  if opt.TimeInterval <> 0 then runReportMode opt
-  else runDefaultMode opt
+  log "Obtained the contract binary from %s" program
+  if program.EndsWith(".ptx") then runCudaMode opt
+  else 
+    Executor.initialize program
+    if opt.TimeInterval <> 0 then runReportMode opt
+    else runDefaultMode opt

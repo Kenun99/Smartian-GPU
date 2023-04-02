@@ -1,9 +1,14 @@
 module Smartian.TCManage
 
+open System
+open System.Runtime.InteropServices
+
 open Nethermind.Evm
 open Executor
 open Options
 open Utils
+open BytesUtils
+open Runner
 
 (*** Directory paths ***)
 
@@ -122,6 +127,77 @@ let private dumpTestCase opt seed =
 let evalAndSave opt seed =
   let covGain, duGain, bugSet = Executor.getCoverage opt seed
   if Set.count bugSet > 0 then dumpBug opt seed bugSet
+  if covGain then dumpTestCase opt seed
+  if not covGain && duGain && opt.Verbosity >= 2 then
+    log "[*] Internal new seed: %s" (Seed.toString seed)
+  covGain || duGain // Returns whether this seed is meaningful.
+
+let evalAndSaveCuda opt seed = 
+  Executor.incrExecutionCount ()
+  let tc = Seed.concretize seed
+  let deployTx = tc.DeployTx
+  let txs = tc.Txs
+  Runner.setEVMEnv(Runner.cuModule, Address.toBytes LE deployTx.From, uint64 deployTx.Timestamp, 
+            uint64 deployTx.Blocknum) |> ignore
+
+  if Runner.cuDeployTx(Runner.cuModule, uint64 deployTx.Value, deployTx.Data, uint32 deployTx.Data.Length) <> true then
+    raise <| Runner.CudaException("DeployFail", Runner.CUresult.CUDA_ERROR_LAUNCH_FAILED)
+
+  for tx in txs do
+    Runner.setEVMEnv(Runner.cuModule, Address.toBytes LE tx.From, 
+              uint64 tx.Timestamp, uint64 tx.Blocknum) |> ignore
+    Runner.cuRunTxsInGroup(Runner.cuModule, Runner.dSeed, uint64 tx.Value, tx.Data, uint32 tx.Data.Length) |> ignore
+  
+  Runner.cuCaptureBugs(Runner.dSignals, elapsedStr() ) |> ignore
+  Runner.postCov(Runner.cuModule)
+  let covGain = Runner.gainCov(uint32 0)
+  let duGain = Runner.gainBug(uint32 0)
+  covGain || duGain
+
+let runInGroup opt deployTx seeds = 
+  Runner.setEVMEnv(Runner.cuModule, Address.toBytes LE deployTx.From, uint64 deployTx.Timestamp, 
+                    uint64 deployTx.Blocknum) |> ignore
+  if Runner.cuDeployTx(Runner.cuModule, uint64 deployTx.Value, deployTx.Data, uint32 deployTx.Data.Length) <> true then
+    raise <| Runner.CudaException("DeployFail", Runner.CUresult.CUDA_ERROR_LAUNCH_FAILED)
+  for seed in seeds do
+    Executor.incrExecutionCount ()
+
+  let TxsLenMax = seeds |> List.map (fun x -> x |> Seed.getTransactionCount) |> List.max 
+  // log "txs #%d; max tx len = %d" seeds.Length TxsLenMax
+  // starting from the runtime transactions
+  for txid in List.init (TxsLenMax - 1) (fun x -> x + 1 ) do
+    // log "txid = %d" txid
+    for tid in List.init 2 (fun x -> x ) do
+      // log "tid = %d; seeds size = %d" tid seeds.Length
+      let seed = seeds.[tid]
+      let dev = Runner.dSeed + uint64 tid * uint64 512
+      if Seed.getTransactionCount seed > txid then
+        // log "txs len %d > txid" seed.Transactions.Length
+        let tx = Transaction.concretize seed.Transactions.[txid]
+        cuDataCpy(dev, uint64 tx.Value, tx.Data, uint32 tx.Data.Length) |> ignore
+      else 
+        // log "txs len %d <= txid" seed.Transactions.Length
+        cuDataCpy(dev, uint64 0, [| |], uint32 0) |> ignore
+    // run all threads together
+    // log "GPU launching"
+    Runner.cuRunTxs(Runner.cuModule, Runner.dSeed) |> ignore
+  Runner.cuCaptureBugs(Runner.dSignals, elapsedStr()) |> ignore
+  Runner.postCov(Runner.cuModule)
+
+let postEvalAndSaveCuda opt (idx, seed) =   
+  let covGain = Runner.gainCov(uint32 idx)
+  let duGain = Runner.gainBug(uint32 idx)  
+
+  if duGain then
+    let tc = Seed.concretize seed
+    let tcStr = TestCase.toJson tc
+    let tcName = sprintf "id-%05d-any_%05d" totalBug (elapsedSec())
+    let tcPath = System.IO.Path.Combine(bugDir, tcName)
+    if opt.Verbosity >= 0 then
+      log "[*] Save bug seed %s: %s" tcName (Seed.toString seed)
+    System.IO.File.WriteAllText(tcPath, tcStr)
+    totalBug <- totalBug + 1
+
   if covGain then dumpTestCase opt seed
   if not covGain && duGain && opt.Verbosity >= 2 then
     log "[*] Internal new seed: %s" (Seed.toString seed)

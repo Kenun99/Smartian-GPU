@@ -128,6 +128,7 @@ let private fuzzingTimer opt = async {
   log "===== Statistics ====="
   TCManage.printStatistics ()
   log "Done, clean up and exit..."
+  // if opt.KernelPath.Length > 0 then Runner.destroy () // fix me
   exit (0)
 }
 
@@ -141,6 +142,7 @@ let run args =
   createDirectoryIfNotExists opt.OutDir
   TCManage.initialize opt.OutDir
   Executor.initialize opt.ProgPath
+  if opt.KernelPath.Length > 0 then Runner.initialize opt.GPU opt.KernelPath
   let contSpec, initSeeds = if opt.StaticDFA then initializeWithDFA opt
                             else initializeWithoutDFA opt
   let concQ = List.fold ConcolicQueue.enqueue ConcolicQueue.empty initSeeds
