@@ -176,17 +176,23 @@ let private repRandMutate contSpec seed =
 let run seed opt contSpec =
   if opt.KernelPath.Length > 0 then 
     assertFileExists opt.KernelPath
+    
+    // initiate CUDA context
+    
+
     let seeds = List.init Config.RAND_FUZZ_TRY_PER_SEED (fun _ -> repRandMutate contSpec seed)
     /// in one thread
     // seeds |> List.filter (TCManage.evalAndSaveCuda opt)
     /// in group
     let res = List.empty
     for each in seeds do
+      Runner.initialize opt.GPU opt.KernelPath
       let deployTx = Transaction.concretize each.Transactions.[0]
       let group = List.init Config.FUZZ_SEEDS_PER_GROUP (fun _ -> repRandMutate contSpec each)
       TCManage.runInGroup opt deployTx group
       let evaled = group |> List.indexed |> List.filter (TCManage.postEvalAndSaveCuda opt) |> List.map (fun _ x -> x) 
       res |> List.append evaled
+      Runner.destroy () |> ignore
     res
     
   else 

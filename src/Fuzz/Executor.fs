@@ -233,6 +233,11 @@ let incrExecutionCount () =
   totalExecutions <- totalExecutions + 1
   phaseExecutions <- phaseExecutions + 1
 
+let incrGroupExecutionCount cnt =
+  allowedExecutions <- allowedExecutions - cnt
+  totalExecutions <- totalExecutions + cnt
+  phaseExecutions <- phaseExecutions + cnt
+
 let private parseBranchInfo tryVal cmp =
   let addr, opStr, (oprnd1: bigint), (oprnd2: bigint)= cmp
   let dist = oprnd1 - oprnd2

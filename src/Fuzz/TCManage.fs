@@ -2,6 +2,7 @@ module Smartian.TCManage
 
 open System
 open System.Runtime.InteropServices
+exception BreakException
 
 open Nethermind.Evm
 open Executor
@@ -9,6 +10,7 @@ open Options
 open Utils
 open BytesUtils
 open Runner
+
 
 (*** Directory paths ***)
 
@@ -155,35 +157,35 @@ let evalAndSaveCuda opt seed =
   covGain || duGain
 
 let runInGroup opt deployTx seeds = 
-  Runner.setEVMEnv(Runner.cuModule, Address.toBytes LE deployTx.From, uint64 deployTx.Timestamp, 
-                    uint64 deployTx.Blocknum) |> ignore
-  if Runner.cuDeployTx(Runner.cuModule, uint64 deployTx.Value, deployTx.Data, uint32 deployTx.Data.Length) <> true then
-    raise <| Runner.CudaException("DeployFail", Runner.CUresult.CUDA_ERROR_LAUNCH_FAILED)
-  for seed in seeds do
-    Executor.incrExecutionCount ()
-
   let TxsLenMax = seeds |> List.map (fun x -> x |> Seed.getTransactionCount) |> List.max 
   // log "txs #%d; max tx len = %d" seeds.Length TxsLenMax
-  // starting from the runtime transactions
-  for txid in List.init (TxsLenMax - 1) (fun x -> x + 1 ) do
-    // log "txid = %d" txid
-    for tid in List.init 2 (fun x -> x ) do
-      // log "tid = %d; seeds size = %d" tid seeds.Length
-      let seed = seeds.[tid]
-      let dev = Runner.dSeed + uint64 tid * uint64 512
-      if Seed.getTransactionCount seed > txid then
-        // log "txs len %d > txid" seed.Transactions.Length
-        let tx = Transaction.concretize seed.Transactions.[txid]
-        cuDataCpy(dev, uint64 tx.Value, tx.Data, uint32 tx.Data.Length) |> ignore
-      else 
-        // log "txs len %d <= txid" seed.Transactions.Length
-        cuDataCpy(dev, uint64 0, [| |], uint32 0) |> ignore
-    // run all threads together
-    // log "GPU launching"
-    Runner.cuRunTxs(Runner.cuModule, Runner.dSeed) |> ignore
-  Runner.cuCaptureBugs(Runner.dSignals, elapsedStr()) |> ignore
-  Runner.postCov(Runner.cuModule)
-  
+
+  Runner.setEVMEnv(Runner.cuModule, Address.toBytes LE deployTx.From, uint64 deployTx.Timestamp, 
+                    uint64 deployTx.Blocknum) |> ignore
+
+  // deployment transaction
+  if Runner.cuDeployTx(Runner.cuModule, uint64 deployTx.Value, deployTx.Data, uint32 deployTx.Data.Length) <> true then
+    raise <| Runner.CudaException("DeployFail", Runner.CUresult.CUDA_ERROR_LAUNCH_FAILED)
+
+  // runtime transactions
+  let rec execCuda txid = 
+    if txid < TxsLenMax then 
+      for tid in 0 .. Config.FUZZ_SEEDS_PER_GROUP - 1 do
+        let seed = seeds.[tid]
+        let dev = Runner.dSeed + uint64 tid * uint64 512
+        if Seed.getTransactionCount seed > txid then
+          let tx = Transaction.concretize seed.Transactions.[txid]
+          cuDataCpy(dev, uint64 tx.Value, tx.Data, uint32 tx.Data.Length) |> ignore
+        else  cuDataCpy(dev, uint64 0, [| |], uint32 0) |> ignore
+    
+      if Runner.cuRunTxs(Runner.cuModule, Runner.dSeed) then
+        Executor.incrGroupExecutionCount Config.FUZZ_SEEDS_PER_GROUP
+        Runner.cuCaptureBugs(Runner.dSignals, elapsedStr()) |> ignore
+        Runner.postCov(Runner.cuModule)
+        execCuda (txid + 1)
+      else log "Error in GPU"
+    // else log "Executed all in GPU"
+  execCuda 1  
   // for sid in List.init (seeds.Length) (fun x -> x) do
   //   let covGain = Runner.gainCov(uint32 sid)
   //   DarwinNotifyFeedback(?, sid)
