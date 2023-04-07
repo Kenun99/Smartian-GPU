@@ -146,6 +146,7 @@ let private mutateTransactionArg seed =
 let private mutateSeed contSpec seed =
   if not (Seed.isInputCursorValid seed) then
     // If all the transactions in the seed have no argument.
+    // match DarwinSelectOpt(?) with
     match random.Next(4) with
     | 0 -> insertTransaction contSpec seed
     | 1 -> shuffleTransaction seed

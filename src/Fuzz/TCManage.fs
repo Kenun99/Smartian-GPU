@@ -183,6 +183,10 @@ let runInGroup opt deployTx seeds =
     Runner.cuRunTxs(Runner.cuModule, Runner.dSeed) |> ignore
   Runner.cuCaptureBugs(Runner.dSignals, elapsedStr()) |> ignore
   Runner.postCov(Runner.cuModule)
+  
+  // for sid in List.init (seeds.Length) (fun x -> x) do
+  //   let covGain = Runner.gainCov(uint32 sid)
+  //   DarwinNotifyFeedback(?, sid)
 
 let postEvalAndSaveCuda opt (idx, seed) =   
   let covGain = Runner.gainCov(uint32 idx)

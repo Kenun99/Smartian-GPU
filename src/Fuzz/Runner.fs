@@ -93,6 +93,17 @@ type Feedback = {
   //   BugSet : Set<(BugClass * int * int)>
 }
 
+/// GA algorithm
+let [<Literal>] GaSoPath = "libga.so"
+
+[<DllImport(GaSoPath, CallingConvention=CallingConvention.Cdecl)>]
+extern void DarwinInit(UInt64 nrSeeds, UInt32 nrMutations)
+
+[<DllImport(GaSoPath, CallingConvention=CallingConvention.Cdecl)>]
+extern Int32 DarwinSelectOpt(UInt64 seed)
+
+[<DllImport(GaSoPath, CallingConvention=CallingConvention.Cdecl)>]
+extern Int32 DarwinNotifyFeedback(UInt64 seed, UInt32 numPaths)
 
 let [<Literal>] DllName = "librunner.so"
 
@@ -198,6 +209,7 @@ let mutable  dSignals = CUdeviceptr.MinValue
 let initialize gpu kernel =
   InitCudaCtx(&cuCtx, gpu, &cuModule, kernel)
   cuMallocAll(cuModule, &dSeed, &dSignals)
+  // DarwinInit(0, 4)
 
 let destroy () = 
   cuFreeAll(cuModule, dSeed)
