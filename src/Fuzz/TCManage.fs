@@ -156,37 +156,59 @@ let evalAndSaveCuda opt seed =
   let duGain = Runner.gainBug(uint32 0)
   covGain || duGain
 
-let runInGroup opt deployTx seeds = 
+let runInGroup opt seeds = 
+  let seedCnt = List.length seeds
+  Executor.incrGroupExecutionCount seedCnt
   let TxsLenMax = seeds |> List.map (fun x -> x |> Seed.getTransactionCount) |> List.max 
   // log "txs #%d; max tx len = %d" seeds.Length TxsLenMax
 
+  // deployment transaction
+  let tc = Seed.concretize seeds.[0]
+  let deployTx = tc.DeployTx
   Runner.setEVMEnv(Runner.cuModule, Address.toBytes LE deployTx.From, uint64 deployTx.Timestamp, 
                     uint64 deployTx.Blocknum) |> ignore
-
-  // deployment transaction
   if Runner.cuDeployTx(Runner.cuModule, uint64 deployTx.Value, deployTx.Data, uint32 deployTx.Data.Length) <> true then
     raise <| Runner.CudaException("DeployFail", Runner.CUresult.CUDA_ERROR_LAUNCH_FAILED)
 
   // runtime transactions
-  let rec execCuda txid = 
-    if txid < TxsLenMax then 
-      for tid in 0 .. Config.FUZZ_SEEDS_PER_GROUP - 1 do
-        let seed = seeds.[tid]
-        let dev = Runner.dSeed + uint64 tid * uint64 512
-        if Seed.getTransactionCount seed > txid then
-          let tx = Transaction.concretize seed.Transactions.[txid]
-          cuDataCpy(dev, uint64 tx.Value, tx.Data, uint32 tx.Data.Length) |> ignore
-        else  cuDataCpy(dev, uint64 0, [| |], uint32 0) |> ignore
+  // let rec execCuda txid = 
+  //   if txid < TxsLenMax then 
+  //     for tid in 0 .. seeds.Length - 1 do
+  //       let seed = seeds.[tid]
+  //       let dev = Runner.dSeed + uint64 tid * uint64 512
+  //       if Seed.getTransactionCount seed > txid then
+  //         let tx = Transaction.concretize seed.Transactions.[txid]
+  //         cuDataCpy(dev, uint64 tx.Value, tx.Data, uint32 tx.Data.Length) |> ignore
+  //       else  cuDataCpy(dev, uint64 0, [| |], uint32 0) |> ignore
     
-      if Runner.cuRunTxs(Runner.cuModule, Runner.dSeed) then
-        Executor.incrGroupExecutionCount Config.FUZZ_SEEDS_PER_GROUP
-        Runner.cuCaptureBugs(Runner.dSignals, elapsedStr()) |> ignore
-        Runner.postCov(Runner.cuModule)
-        execCuda (txid + 1)
-      else log "Error in GPU"
+  //     if Runner.cuRunTxs(Runner.cuModule, Runner.dSeed) then
+  //       Executor.incrGroupExecutionCount seeds.Length
+  //       Runner.cuCaptureBugs(Runner.dSignals, elapsedStr()) |> ignore
+  //       Runner.postCov(Runner.cuModule)
+  //       execCuda (txid + 1)
+  //     else log "Error to exected tx#%d in GPU" txid
     // else log "Executed all in GPU"
-  execCuda 1  
-  // for sid in List.init (seeds.Length) (fun x -> x) do
+  // execCuda 1  
+
+  for txid in 1 .. TxsLenMax - 1 do
+    for tid in 0 .. seedCnt - 1 do
+      // log "obtained txid%d tid# %d" txid tid
+      let seed = seeds.[tid]
+      let dev = Runner.dSeed + uint64 tid * uint64 512
+      if Seed.getTransactionCount seed > txid then
+        let tx = Transaction.concretize seed.Transactions.[txid]
+        cuDataCpy(dev, uint64 tx.Value, tx.Data, uint32 tx.Data.Length) |> ignore
+        Runner.setEVMEnv(Runner.cuModule, Address.toBytes LE tx.From, 
+                         uint64 tx.Timestamp, uint64 tx.Blocknum) |> ignore
+      else  cuDataCpy(dev, uint64 0, [| |], uint32 0) |> ignore
+    // FIXME: https://stackoverflow.com/questions/56329377/reset-cuda-context-after-exception/56330491#56330491
+    if Runner.cuRunTxs(Runner.cuModule, Runner.dSeed) then
+      // log "Executed in CUDA Tx#%d : %s" txid (Transaction.toString seeds.[0].Transactions.[txid])
+      Runner.cuCaptureBugs(Runner.dSignals, elapsedStr()) |> ignore
+      Runner.postCov(Runner.cuModule)
+    // else log "Error in GPU at Tx#%d : %s" txid (Transaction.toString seeds.[0].Transactions.[txid])
+
+  // for tid in 0 .. seedCnt - 1 do
   //   let covGain = Runner.gainCov(uint32 sid)
   //   DarwinNotifyFeedback(?, sid)
 

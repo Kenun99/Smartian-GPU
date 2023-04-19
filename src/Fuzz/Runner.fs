@@ -207,6 +207,7 @@ let mutable  dSeed = CUdeviceptr.MinValue
 let mutable  dSignals = CUdeviceptr.MinValue
 
 let initialize gpu kernel =
+  log "Initiate CUDA at : %d for %s" gpu kernel 
   InitCudaCtx(&cuCtx, gpu, &cuModule, kernel)
   cuMallocAll(cuModule, &dSeed, &dSignals)
   // DarwinInit(0, 4)

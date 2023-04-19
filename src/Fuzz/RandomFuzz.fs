@@ -174,26 +174,32 @@ let private repRandMutate contSpec seed =
   |> Seed.resetBlockData
 
 let run seed opt contSpec =
-  if opt.KernelPath.Length > 0 then 
-    assertFileExists opt.KernelPath
-    
-    // initiate CUDA context
-    
-
-    let seeds = List.init Config.RAND_FUZZ_TRY_PER_SEED (fun _ -> repRandMutate contSpec seed)
+  if opt.KernelPath.Length > 0 then     
     /// in one thread
-    // seeds |> List.filter (TCManage.evalAndSaveCuda opt)
+    // List.init Config.RAND_FUZZ_TRY_PER_SEED (fun _ -> repRandMutate contSpec seed)
+    // |> List.filter (TCManage.evalAndSaveCuda opt)
+    // let origin = Seed.copy seed
     /// in group
     let res = List.empty
-    for each in seeds do
-      Runner.initialize opt.GPU opt.KernelPath
-      let deployTx = Transaction.concretize each.Transactions.[0]
-      let group = List.init Config.FUZZ_SEEDS_PER_GROUP (fun _ -> repRandMutate contSpec each)
-      TCManage.runInGroup opt deployTx group
-      let evaled = group |> List.indexed |> List.filter (TCManage.postEvalAndSaveCuda opt) |> List.map (fun _ x -> x) 
+    for itr in 0 .. Config.RAND_FUZZ_TRY_PER_SEED / Config.FUZZ_SEEDS_PER_GROUP do 
+      let seeds = List.init Config.FUZZ_SEEDS_PER_GROUP (fun _ -> if itr = 0 then seed else repRandMutate contSpec seed)        
+      TCManage.runInGroup opt seeds |> ignore
+      let evaled = seeds |> List.indexed |> List.filter (TCManage.postEvalAndSaveCuda opt) |> List.map (fun _ x -> x)
       res |> List.append evaled
-      Runner.destroy () |> ignore
     res
+    // seeds |> List.filter (TCManage.evalAndSave opt)
+    // let res = List.empty
+    // for each in seeds do
+    //   // if opt.Verbosity >= 3 then log "CUDA fuzzing on seed : %s" (Seed.toString each)
+    //   // let deployTx = Transaction.concretize each.Transactions.[0]
+    //   let batchseed = List.init Config.FUZZ_SEEDS_PER_GROUP (fun _ -> each)
+    //   // let group = List.init 1 (fun _ -> repRandMutate contSpec each)
+    //   TCManage.runInGroup opt batchseed
+    //   seeds |> List.filter (TCManage.evalAndSaveCuda opt)
+    //   let evaled = group |> List.indexed |> List.filter (TCManage.postEvalAndSaveCuda opt) |> List.map (fun _ x -> x)
+    //   res |> List.append evaled
+    //   // Runner.destroy () |> ignore
+    // res
     
   else 
     List.init Config.RAND_FUZZ_TRY_PER_SEED (fun _ -> repRandMutate contSpec seed)
