@@ -135,14 +135,16 @@ extern bool cuDeployTx(CUmodule cudaModule, UInt64 value, byte[] data, UInt32 si
 extern bool cuRunTxsInGroup(CUmodule cudaModule, CUdeviceptr dSeeds, UInt64 value, byte[] data, UInt32 size)
 
 [<DllImport(DllName, CallingConvention=CallingConvention.Cdecl)>]
-extern bool cuRunTxs(CUmodule cudaModule, CUdeviceptr dSeeds)
-
-
-[<DllImport(DllName, CallingConvention=CallingConvention.Cdecl)>]
-extern bool cuCaptureBugs(CUdeviceptr dSignals, [<MarshalAs(UnmanagedType.LPStr)>]string timeStr) 
+extern UInt64 cuRunTxs(CUmodule cudaModule, CUdeviceptr dSeeds, byte[] argTypeMap, Int32 mapSize)
 
 [<DllImport(DllName, CallingConvention=CallingConvention.Cdecl)>]
-extern void postCov(CUmodule cudaModule)
+extern bool postGainDu(CUdeviceptr dSignals, [<MarshalAs(UnmanagedType.LPStr)>]string timeStr) 
+
+[<DllImport(DllName, CallingConvention=CallingConvention.Cdecl)>]
+extern bool postGainCov(CUmodule cudaModule)
+
+[<DllImport(DllName, CallingConvention=CallingConvention.Cdecl)>]
+extern UInt64 obtainCov(CUmodule cudaModule)
 
 [<DllImport(DllName, CallingConvention=CallingConvention.Cdecl)>]
 extern bool gainCov(UInt32 tid)

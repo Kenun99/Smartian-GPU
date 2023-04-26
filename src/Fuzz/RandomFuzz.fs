@@ -128,6 +128,7 @@ let private tryInterestingElem elem =
   { elem with ByteVals = newByteVals }
 
 let private mutateElem elem =
+  // tryInterestingElem elem
   match random.Next(5) with
   // Type-unaware mutations.
   | 0 -> flipBit elem
@@ -179,14 +180,24 @@ let run seed opt contSpec =
     // List.init Config.RAND_FUZZ_TRY_PER_SEED (fun _ -> repRandMutate contSpec seed)
     // |> List.filter (TCManage.evalAndSaveCuda opt)
     // let origin = Seed.copy seed
-    /// in group
-    let res = List.empty
-    for itr in 0 .. Config.RAND_FUZZ_TRY_PER_SEED / Config.FUZZ_SEEDS_PER_GROUP do 
-      let seeds = List.init Config.FUZZ_SEEDS_PER_GROUP (fun _ -> if itr = 0 then seed else repRandMutate contSpec seed)        
-      TCManage.runInGroup opt seeds |> ignore
-      let evaled = seeds |> List.indexed |> List.filter (TCManage.postEvalAndSaveCuda opt) |> List.map (fun _ x -> x)
-      res |> List.append evaled
-    res
+    // let res = List.empty
+    // let seeds = List.init RAND_FUZZ_TRY_PER_SEED (fun _ -> repRandMutate contSpec seed)
+    // for itr in 1 .. 128 do 
+    //   // let seeds = List.init 128 (fun _ -> if itr = 1 then seed else repRandMutate contSpec seed)
+    //   TCManage.runInGroup opt seeds |> ignore
+    //   // let evaled = seeds |> List.indexed |> List.filter (TCManage.postEvalAndSaveCuda opt) |> List.map (fun _ x -> x)
+    //   // res |> List.append evaled
+    // res
+
+    List.init Config.RAND_FUZZ_TRY_PER_SEED (fun _ -> repRandMutate contSpec seed)
+    |> List.filter (TCManage.runInGroup opt)
+    // seeds |> List.indexed |> List.filter (TCManage.postEvalAndSaveCuda opt) |> List.map (fun _ x -> x)
+    // for itr in 1 .. 128 do 
+    //   // let seeds = List.init 128 (fun _ -> if itr = 1 then seed else repRandMutate contSpec seed)
+    //   TCManage.runInGroup opt seeds |> ignore
+    //   // let evaled = seeds |> List.indexed |> List.filter (TCManage.postEvalAndSaveCuda opt) |> List.map (fun _ x -> x)
+    //   // res |> List.append evaled
+    // res
     // seeds |> List.filter (TCManage.evalAndSave opt)
     // let res = List.empty
     // for each in seeds do

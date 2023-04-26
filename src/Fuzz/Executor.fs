@@ -215,10 +215,11 @@ let execute tc covFlag traceDU checkOptional useOthersOracle =
     BugSet = bugs }
 
 (*** Statistics ***)
-
-let mutable totalExecutions = 0
+let mutable totalTxsExecs : uint64 = 0UL
+let mutable totalExecutions : uint64 = 0UL
 let mutable phaseExecutions = 0
 
+let getTotalTxsExecs () = totalTxsExecs
 let getTotalExecutions () = totalExecutions
 let getPhaseExecutions () = phaseExecutions
 let resetPhaseExecutions () = phaseExecutions <- 0
@@ -230,13 +231,14 @@ let allocateResource n = allowedExecutions <- n
 let isExhausted () = allowedExecutions <= 0
 let incrExecutionCount () =
   allowedExecutions <- allowedExecutions - 1
-  totalExecutions <- totalExecutions + 1
+  totalExecutions <- totalExecutions + 1UL
   phaseExecutions <- phaseExecutions + 1
 
-let incrGroupExecutionCount cnt =
-  allowedExecutions <- allowedExecutions - cnt
+let incrTcsExecutionCount cnt =
   totalExecutions <- totalExecutions + cnt
-  phaseExecutions <- phaseExecutions + cnt
+
+let incrTxsExectionCount cnt =
+  totalTxsExecs <- totalTxsExecs + cnt
 
 let private parseBranchInfo tryVal cmp =
   let addr, opStr, (oprnd1: bigint), (oprnd2: bigint)= cmp

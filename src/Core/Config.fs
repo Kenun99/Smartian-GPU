@@ -13,7 +13,6 @@ let DURABLE_QUEUE_SIZE = 1000
 let MAX_CHUNK_LEN = 32
 let STRING_ELEM_LEN = 4
 let RAND_FUZZ_TRY_PER_SEED = 100
-let FUZZ_SEEDS_PER_GROUP = 2
 let BRANCH_COMB_WINDOW = 6
 let N_SOLVE = 600 // Grey-box concolic testing param (see the original paper).
 let N_SPAWN = 10 // Grey-box concolic testing param (see the original paper).

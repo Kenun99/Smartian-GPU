@@ -109,13 +109,13 @@ let private repeatRandFuzz opt contSpec concQ randQ randFuzzBudget =
 
 let rec private fuzzLoop opt contSpec concQ randQ =
   let concolicBudget, randFuzzBudget = allocResource ()
-  let concQSize = ConcolicQueue.size concQ
-  let randQSize = RandFuzzQueue.size randQ
   if opt.Verbosity >= 2 then
+    let concQSize = ConcolicQueue.size concQ
+    let randQSize = RandFuzzQueue.size randQ
     log "Concolic budget: %d, Rand budget: %d" concolicBudget randFuzzBudget
     log "Concolic queue size: %d, Random Queue size: %d" concQSize randQSize
   // Perform grey-box concolic testing
-  let concQ, randQ = repeatGreyConcolic opt concQ randQ concolicBudget
+  // let concQ, randQ = repeatGreyConcolic opt concQ randQ concolicBudget
   // Perform random fuzzing
   let concQ, randQ = repeatRandFuzz opt contSpec concQ randQ randFuzzBudget
   fuzzLoop opt contSpec concQ randQ
@@ -128,7 +128,8 @@ let private fuzzingTimer opt = async {
   log "===== Statistics ====="
   TCManage.printStatistics ()
   log "Done, clean up and exit..."
-  if opt.KernelPath.Length > 0 then Runner.destroy () // fix me
+  // if opt.KernelPath.Length > 0 then Runner.destroy () // fix me
+  // System.AppDomain.CurrentDomain.ProcessExit.Add(fun _ -> TCManage.printStatistics ()) 
   exit (0)
 }
 
