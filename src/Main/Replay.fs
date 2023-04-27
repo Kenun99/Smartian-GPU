@@ -11,6 +11,8 @@ open Runner
 
 type ReplayerCLI =
   | [<AltCommandLine("-p")>] [<Mandatory>] [<Unique>] Program of path: string
+  | [<AltCommandLine("-k")>] [<Unique>] Kernel of path: string
+  | [<AltCommandLine("-g")>] [<Unique>] GPU of int
   | [<AltCommandLine("-i")>] [<Mandatory>] [<Unique>] InputDir of path: string
   | [<AltCommandLine("-t")>] [<Unique>] Interval of time: int
   | [<Unique>] NoDDFA
@@ -21,6 +23,8 @@ with
     member s.Usage =
       match s with
       | Program _ -> "Target program for test case replaying"
+      | Kernel _ -> "Target PTX for test case generation with GPU fuzzing."
+      | GPU _ -> "The GPU device ID to bind the fuzzer."
       | InputDir _ -> "Directory of testcases to replay"
       | Interval _ -> "Time interval (in minutes) for coverage report"
       | NoDDFA -> "Disable dynamic data-flow analysis during the fuzzing."
@@ -32,6 +36,8 @@ with
 
 type ReplayOption = {
   Program           : string
+  KernelPath        : string
+  GPU               : int
   TestcaseDir       : string
   TimeInterval      : int
   DynamicDFA        : bool
@@ -45,6 +51,8 @@ let parseReplayOption args =
   let r = try parser.Parse(args) with
           :? Argu.ArguParseException -> printLine (parser.PrintUsage()); exit 1
   { Program = System.IO.Path.GetFullPath(r.GetResult (<@ Program @>))
+    KernelPath = r.GetResult (<@ Kernel @>, defaultValue = "")
+    GPU = r.GetResult (<@ GPU @>, defaultValue = 0)
     TestcaseDir = r.GetResult (<@ InputDir @>)
     TimeInterval = r.GetResult (<@ Interval @>, defaultValue = 0)
     DynamicDFA = not (r.Contains(<@ NoDDFA @>)) // Enabled by default.
@@ -116,50 +124,36 @@ let runDefaultMode opt =
   log "Covered Instructions: %d" accumInstrs.Count
   log "Elapsed time (ms): %.4f" totalElapsed
 
-// let runCudaMode opt =
-//   let testcaseDir = opt.TestcaseDir
-//   let traceDU = opt.DynamicDFA
-//   let checkOptionalBugs = opt.CheckOptionalBugs
-//   let useOthersOracle = opt.UseOthersOracle
-//   log "Start replaying test cases in : %s" testcaseDir
-//   let mutable totalElapsed = 0.0
+let runCudaMode opt =
+  assertFileExists opt.KernelPath
+  Runner.initialize opt.GPU opt.KernelPath
+  let testcaseDir = opt.TestcaseDir
+  let timeInterval = opt.TimeInterval
+  let buckets = bucketizeTCs timeInterval testcaseDir
+  for i = 0 to Array.length buckets - 1 do
+    for file in buckets.[i] do
+      // log "Replaying test case: %s" file
+      let tcStr = System.IO.File.ReadAllText file
+      let tc = TestCase.fromJson tcStr
+      let txs = tc.Txs
+      let deployTx = tc.DeployTx
+      Runner.setEVMEnv(Runner.cuModule, Address.toBytes LE deployTx.From, 
+                       uint64 deployTx.Timestamp, uint64 deployTx.Blocknum) |> ignore
+      if Runner.cuDeployTx(Runner.cuModule, uint64 deployTx.Value, deployTx.Data, uint32 deployTx.Data.Length) <> true then
+        raise <| Runner.CudaException("DeployFail", Runner.CUresult.CUDA_ERROR_LAUNCH_FAILED)
+      let argTypeMap = [|68uy|]
+      for tx in txs do
+        Runner.setEVMEnv(Runner.cuModule, Address.toBytes LE tx.From, 
+                        uint64 tx.Timestamp, uint64 tx.Blocknum) |> ignore
+        cuDataCpy(Runner.dSeed, uint64 tx.Value, tx.Data, uint32 tx.Data.Length) |> ignore
+        if Runner.cuRunTxs(Runner.cuModule, Runner.dSeed, argTypeMap, 0) = 0UL then
+          log "[*] Fail to execute transaction: %s" (TXData.toJson "      " tx)
+      Runner.postGainCov(Runner.cuModule) |> ignore
 
-//   let mutable cuModule = CUmodule.Zero
-//   let mutable cuCtx = CUcontext.Zero    
-//   let GPUDev:Int32 = 4
-//   InitCudaCtx(&cuCtx, GPUDev, &cuModule, opt.Program)
-
-//   let mutable dSeed = CUdeviceptr.MinValue
-//   let mutable dSignals = CUdeviceptr.MinValue
-//   cuMallocAll(cuModule, &dSeed, &dSignals)
-
-//   for file in sortTCs testcaseDir do
-//     log "Replaying test case: %s" file
-//     let tcStr = System.IO.File.ReadAllText file
-//     let tc = TestCase.fromJson tcStr
-//     let deployTx = tc.DeployTx
-//     let txs = tc.Txs
-
-//     let stopWatch = System.Diagnostics.Stopwatch.StartNew()  
-//     setEVMEnv(cuModule, Address.toBytes LE deployTx.From, uint64 deployTx.Timestamp, 
-//               uint64 deployTx.Blocknum) |> ignore
-
-//     if cuDeployTx(cuModule, uint64 deployTx.Value, deployTx.Data, uint32 deployTx.Data.Length) <> true then
-//       raise <| CudaException("DeployFail", CUresult.CUDA_ERROR_LAUNCH_FAILED)
-
-//     for tx in txs do
-//       setEVMEnv(cuModule, Address.toBytes LE tx.From, uint64 tx.Timestamp, 
-//                 uint64 tx.Blocknum) |> ignore
-//       cuRunTxsInGroup(cuModule, dSeed, uint64 tx.Value, tx.Data, uint32 tx.Data.Length) |> ignore
-//       cuCaptureBugs(dSignals, elapsedStr()) |> ignore
-//       postCov(cuModule)
-
-//     stopWatch.Stop()
-//     totalElapsed <- totalElapsed + stopWatch.Elapsed.TotalMilliseconds
-  
-//   log "Elapsed time (ms): %.4f" totalElapsed
-//   cuFreeAll(cuModule, dSeed)
-//   DestroyCuda(cuCtx, cuModule)
+    let elapsed = i * timeInterval
+    let edges = Runner.obtainCov Runner.cuModule
+    printfn "%02dm: %d Edges, %d Instrs" elapsed edges 0
+  Runner.destroy ()
 
 /// Replay test cases in the given directory on target program.
 let run args =
@@ -167,5 +161,7 @@ let run args =
   let program = opt.Program
   assertFileExists program
   Executor.initialize program
-  if opt.TimeInterval <> 0 then runReportMode opt
+  log "file in %s %d" opt.KernelPath opt.KernelPath.Length
+  if opt.TimeInterval <> 0 then 
+    if opt.KernelPath.Length <> 0 then runCudaMode opt else runReportMode opt
   else runDefaultMode opt
