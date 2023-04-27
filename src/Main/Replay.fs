@@ -155,13 +155,31 @@ let runCudaMode opt =
     printfn "%02dm: %d Edges, %d Instrs" elapsed edges 0
   Runner.destroy ()
 
+let runCollectMode opt =
+  let testcaseDir = opt.TestcaseDir
+  let timeInterval = opt.TimeInterval
+  let buckets = bucketizeTCs timeInterval testcaseDir
+  let mutable edges = 0
+  for i = 0 to Array.length buckets - 1 do
+    for file in buckets.[i] do
+      // log "Replaying test case: %s" file
+      let covStr = System.IO.File.ReadAllText file
+      let covTuple = covStr.Split [|' '|] // (edges, instructions)
+      let vald = covTuple.[0] |> int
+      if edges < vald then edges <- vald
+
+    let elapsed = i * timeInterval
+    printfn "%02dm: %d Edges, %d Instrs" elapsed edges 0
+
 /// Replay test cases in the given directory on target program.
 let run args =
   let opt = parseReplayOption args
   let program = opt.Program
   assertFileExists program
   Executor.initialize program
-  log "file in %s %d" opt.KernelPath opt.KernelPath.Length
+  // log "file in %s %d" opt.KernelPath opt.KernelPath.Length
   if opt.TimeInterval <> 0 then 
-    if opt.KernelPath.Length <> 0 then runCudaMode opt else runReportMode opt
+    if opt.KernelPath.Length = 0 then runReportMode opt
+    elif opt.KernelPath = "NULL" then runCollectMode opt
+    else runCudaMode opt 
   else runDefaultMode opt

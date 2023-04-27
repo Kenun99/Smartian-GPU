@@ -42,6 +42,8 @@ let mutable private totalTO = 0
 let mutable private totalFE = 0
 let mutable private totalRV = 0
 
+let mutable private totalCov : uint64 = 0UL
+
 let checkFreezingEtherBug () =
   if receivedEther && useDelegateCall && not canSendEther then
     totalFE <- totalFE + 1
@@ -129,6 +131,18 @@ let private dumpTestCase opt seed =
     log "[*] Save new seed %s: %s" tcName (Seed.toString seed)
   System.IO.File.WriteAllText(tcPath, tcStr)
   totalTC <- totalTC + 1
+
+let private dumpCov opt = 
+  let edges = Runner.obtainCov Runner.cuModule
+  if opt.Verbosity >= 1 then 
+    log "[COV] %d Edges, 0 Instrs" edges
+  if edges > totalCov then 
+    totalCov <- edges
+    let covStr = sprintf "%d %d" totalCov 0
+    let tcName = sprintf "id-%05d_%05d" totalTC (elapsedSec())
+    let tcPath = System.IO.Path.Combine(tcDir, tcName)
+    System.IO.File.WriteAllText(tcPath, covStr)
+    totalTC <- totalTC + 1
 
 let evalAndSave opt seed =
   let covGain, duGain, bugSet = Executor.getCoverage opt seed
@@ -257,8 +271,7 @@ let runInGroup opt seed =
     System.IO.File.WriteAllText(tcPath, tcStr)
     totalBug <- totalBug + 1
 
-  if covGain then 
-    log "[COV] %d Edges, 0 Instrs" (Runner.obtainCov Runner.cuModule)
+  if covGain then dumpCov opt 
 
   if not covGain && duGain && opt.Verbosity >= 2 then
     log "[*] Internal new seed: %s" (Seed.toString seed)
