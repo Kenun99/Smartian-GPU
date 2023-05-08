@@ -1,6 +1,6 @@
 BUILDDIR=$(shell pwd)/build
 
-all: $(BUILDDIR) Runner GA Smartian
+all: $(BUILDDIR) Runner  Smartian
 
 clean:
 	@dotnet clean -c Release
@@ -10,12 +10,9 @@ $(BUILDDIR):
 	@mkdir -p $(BUILDDIR)
 
 Runner:
-	@cp /home/weimin/build/runner/librunner.so $(BUILDDIR)
-
-GA:
-	@cp /home/weimin/build/GA/libga.so $(BUILDDIR)
+	@cp $(LIBRUNNER) $(BUILDDIR)
 
 Smartian:
 	@dotnet build -c Release -o $(BUILDDIR)
 
-.PHONY: all clean Smartian GA Runner
+.PHONY: all clean Smartian  Runner

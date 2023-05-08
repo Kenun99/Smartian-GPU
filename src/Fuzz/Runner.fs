@@ -94,16 +94,16 @@ type Feedback = {
 }
 
 /// GA algorithm
-let [<Literal>] GaSoPath = "libga.so"
+// let [<Literal>] GaSoPath = "libga.so"
 
-[<DllImport(GaSoPath, CallingConvention=CallingConvention.Cdecl)>]
-extern void DarwinInit(UInt64 nrSeeds, UInt32 nrMutations)
+// [<DllImport(GaSoPath, CallingConvention=CallingConvention.Cdecl)>]
+// extern void DarwinInit(UInt64 nrSeeds, UInt32 nrMutations)
 
-[<DllImport(GaSoPath, CallingConvention=CallingConvention.Cdecl)>]
-extern Int32 DarwinSelectOpt(UInt64 seed)
+// [<DllImport(GaSoPath, CallingConvention=CallingConvention.Cdecl)>]
+// extern Int32 DarwinSelectOpt(UInt64 seed)
 
-[<DllImport(GaSoPath, CallingConvention=CallingConvention.Cdecl)>]
-extern Int32 DarwinNotifyFeedback(UInt64 seed, UInt32 numPaths)
+// [<DllImport(GaSoPath, CallingConvention=CallingConvention.Cdecl)>]
+// extern Int32 DarwinNotifyFeedback(UInt64 seed, UInt32 numPaths)
 
 let [<Literal>] DllName = "librunner.so"
 
